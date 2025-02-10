@@ -97,6 +97,7 @@ public:
 		ITEM_CUSTOMFX,
 		ITEM_CONTEXT,
 		ITEM_LANGUAGE,
+		ITEM_REGION,
 	};
 
 	enum MenuItems {
@@ -302,6 +303,11 @@ private:
 	struct ItemLanguage : public Item {
 		String language;
 		ItemLanguage() { type = ITEM_LANGUAGE; }
+	};
+
+	struct ItemRegion : public Item {
+		String id;
+		ItemRegion() { type = ITEM_REGION; }
 	};
 
 	struct ItemParagraph : public Item {
@@ -666,6 +672,8 @@ private:
 		float base_scale = 1.0;
 	} theme_cache;
 
+	HashMap<String, Item *> _region_items;
+
 public:
 	String get_parsed_text() const;
 	void add_text(const String &p_text);
@@ -690,6 +698,7 @@ public:
 	void push_underline();
 	void push_strikethrough();
 	void push_language(const String &p_language);
+	void push_region(const String &p_id);
 	void push_paragraph(HorizontalAlignment p_alignment, Control::TextDirection p_direction = Control::TEXT_DIRECTION_INHERITED, const String &p_language = "", TextServer::StructuredTextParser p_st_parser = TextServer::STRUCTURED_TEXT_DEFAULT, BitField<TextServer::JustificationFlag> p_jst_flags = TextServer::JUSTIFICATION_WORD_BOUND | TextServer::JUSTIFICATION_KASHIDA | TextServer::JUSTIFICATION_SKIP_LAST_LINE | TextServer::JUSTIFICATION_DO_NOT_SKIP_SINGLE_LINE, const PackedFloat32Array &p_tab_stops = PackedFloat32Array());
 	void push_indent(int p_level);
 	void push_list(int p_level, ListType p_list, bool p_capitalize, const String &p_bullet = String::utf8("•"));
@@ -842,6 +851,9 @@ public:
 	void install_effect(const Variant effect);
 
 	virtual Size2 get_minimum_size() const override;
+
+	Dictionary get_regions();
+	Dictionary get_paragraph_region_rects(int p_line, const String& p_id);
 
 	RichTextLabel(const String &p_text = String());
 	~RichTextLabel();

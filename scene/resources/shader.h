@@ -77,6 +77,7 @@ public:
 
 	void set_code(const String &p_code);
 	String get_code() const;
+	static String check_code(const String &p_code);
 
 	void get_shader_uniform_list(List<PropertyInfo> *p_params, bool p_get_groups = false) const;
 

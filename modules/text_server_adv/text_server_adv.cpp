@@ -4284,6 +4284,20 @@ Variant TextServerAdvanced::_shaped_get_span_meta(const RID &p_shaped, int64_t p
 	return sd->spans[p_index].meta;
 }
 
+Vector2i TextServerAdvanced::_shaped_get_span_range(const RID &p_shaped, int64_t p_index) const {
+	ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
+	ERR_FAIL_NULL_V(sd, Vector2i(-1, -1));
+	ERR_FAIL_INDEX_V(p_index, sd->spans.size(), Vector2i(-1, -1));
+	return Vector2i(sd->spans[p_index].start, sd->spans[p_index].end);
+}
+
+Variant TextServerAdvanced::_shaped_get_span_embedded_key(const RID &p_shaped, int64_t p_index) const {
+	ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
+	ERR_FAIL_NULL_V(sd, Vector2i(-1, -1));
+	ERR_FAIL_INDEX_V(p_index, sd->spans.size(), Vector2i(-1, -1));
+	return sd->spans[p_index].embedded_key;
+}
+
 void TextServerAdvanced::_shaped_set_span_update_font(const RID &p_shaped, int64_t p_index, const TypedArray<RID> &p_fonts, int64_t p_size, const Dictionary &p_opentype_features) {
 	ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_NULL(sd);

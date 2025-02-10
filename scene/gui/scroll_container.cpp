@@ -290,6 +290,8 @@ void ScrollContainer::ensure_control_visible(Control *p_control) {
 }
 
 void ScrollContainer::_reposition_children() {
+	children_repositioning = true;
+
 	update_scrollbars();
 	Size2 size = get_size();
 	Point2 ofs;
@@ -332,6 +334,8 @@ void ScrollContainer::_reposition_children() {
 	}
 
 	queue_redraw();
+
+	children_repositioning = false;
 }
 
 void ScrollContainer::_notification(int p_what) {
@@ -564,6 +568,10 @@ VScrollBar *ScrollContainer::get_v_scroll_bar() {
 	return v_scroll;
 }
 
+bool ScrollContainer::get_children_repositioning() const {
+	return children_repositioning;
+}
+
 void ScrollContainer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_h_scroll", "value"), &ScrollContainer::set_h_scroll);
 	ClassDB::bind_method(D_METHOD("get_h_scroll"), &ScrollContainer::get_h_scroll);
@@ -591,6 +599,7 @@ void ScrollContainer::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_h_scroll_bar"), &ScrollContainer::get_h_scroll_bar);
 	ClassDB::bind_method(D_METHOD("get_v_scroll_bar"), &ScrollContainer::get_v_scroll_bar);
+	ClassDB::bind_method(D_METHOD("get_children_repositioning"), &ScrollContainer::get_children_repositioning);
 	ClassDB::bind_method(D_METHOD("ensure_control_visible", "control"), &ScrollContainer::ensure_control_visible);
 
 	ADD_SIGNAL(MethodInfo("scroll_started"));

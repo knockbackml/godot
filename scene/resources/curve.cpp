@@ -76,7 +76,7 @@ int Curve::_add_point(Vector2 p_position, real_t p_left_tangent, real_t p_right_
 
 		real_t diff = p_position.x - _points[0].position.x;
 
-		if (diff > 0) {
+		if (diff >= 0) {
 			_points.push_back(Point(p_position, p_left_tangent, p_right_tangent, p_left_mode, p_right_mode));
 			ret = 1;
 		} else {
@@ -85,18 +85,19 @@ int Curve::_add_point(Vector2 p_position, real_t p_left_tangent, real_t p_right_
 		}
 
 	} else {
-		int i = get_index(p_position.x);
+		// Not using Curve::get_index(real_t) to preserve the order of points with identical x
+		int l = 0, r = _points.size();
 
-		if (i == 0 && p_position.x < _points[0].position.x) {
-			// Insert before anything else
-			_points.insert(0, Point(p_position, p_left_tangent, p_right_tangent, p_left_mode, p_right_mode));
-			ret = 0;
-		} else {
-			// Insert between i and i+1
-			++i;
-			_points.insert(i, Point(p_position, p_left_tangent, p_right_tangent, p_left_mode, p_right_mode));
-			ret = i;
+		while (l < r) {
+			int m = (l + r) / 2;
+			real_t m_x = _points[m].position.x;
+
+			if (m_x <= p_position.x) l = m + 1;
+			else r = m;
 		}
+
+		_points.insert(l, Point(p_position, p_left_tangent, p_right_tangent, p_left_mode, p_right_mode));
+		ret = l;
 	}
 
 	update_auto_tangents(ret);

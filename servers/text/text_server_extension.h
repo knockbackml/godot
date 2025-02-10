@@ -435,9 +435,13 @@ public:
 
 	virtual int64_t shaped_get_span_count(const RID &p_shaped) const override;
 	virtual Variant shaped_get_span_meta(const RID &p_shaped, int64_t p_index) const override;
+	virtual Vector2i shaped_get_span_range(const RID &p_shaped, int64_t p_index) const override;
+	virtual Variant shaped_get_span_embedded_key(const RID &p_shaped, int64_t p_index) const override;
 	virtual void shaped_set_span_update_font(const RID &p_shaped, int64_t p_index, const TypedArray<RID> &p_fonts, int64_t p_size, const Dictionary &p_opentype_features = Dictionary()) override;
 	GDVIRTUAL1RC(int64_t, _shaped_get_span_count, RID);
 	GDVIRTUAL2RC(Variant, _shaped_get_span_meta, RID, int64_t);
+	GDVIRTUAL2RC(Vector2i, _shaped_get_span_range, RID, int64_t);
+	GDVIRTUAL2RC(Variant, _shaped_get_span_embedded_key, RID, int64_t);
 	GDVIRTUAL5(_shaped_set_span_update_font, RID, int64_t, const TypedArray<RID> &, int64_t, const Dictionary &);
 
 	virtual RID shaped_text_substr(const RID &p_shaped, int64_t p_start, int64_t p_length) const override;
