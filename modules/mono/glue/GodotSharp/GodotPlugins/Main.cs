@@ -100,7 +100,7 @@ namespace GodotPlugins
                 SharedAssemblies.Add(CoreApiAssembly.GetName());
                 NativeLibrary.SetDllImportResolver(CoreApiAssembly, _dllImportResolver);
 
-                AlcReloadCfg.Configure(alcReloadEnabled: _editorHint);
+                AlcReloadCfg.Configure(alcReloadEnabled: true);
                 NativeFuncs.Initialize(unmanagedCallbacks, unmanagedCallbacksSize);
 
                 if (_editorHint)

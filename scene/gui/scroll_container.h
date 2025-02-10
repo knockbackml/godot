@@ -63,6 +63,7 @@ private:
 	bool drag_touching = false;
 	bool drag_touching_deaccel = false;
 	bool beyond_deadzone = false;
+	bool children_repositioning = false;
 
 	ScrollMode horizontal_scroll_mode = SCROLL_MODE_AUTO;
 	ScrollMode vertical_scroll_mode = SCROLL_MODE_AUTO;
@@ -120,6 +121,8 @@ public:
 
 	int get_deadzone() const;
 	void set_deadzone(int p_deadzone);
+
+	bool get_children_repositioning() const;
 
 	bool is_following_focus() const;
 	void set_follow_focus(bool p_follow);

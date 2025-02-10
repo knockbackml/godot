@@ -87,6 +87,7 @@ public:
 
 	void set_code(const String &p_code);
 	String get_code() const;
+	static String check_code(const String &p_code);
 
 	void inspect_native_shader_code();
 

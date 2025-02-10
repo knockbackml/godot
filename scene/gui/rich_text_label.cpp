@@ -2544,7 +2544,7 @@ RichTextLabel::ItemDropcap *RichTextLabel::_find_dc_item(Item *p_item) {
 RichTextLabel::ItemList *RichTextLabel::_find_list_item(Item *p_item) {
 	Item *item = p_item;
 
-	while (item) {
+	while (item && (item->type != ITEM_TABLE || item == p_item)) {
 		if (item->type == ITEM_LIST) {
 			return static_cast<ItemList *>(item);
 		}
@@ -2560,7 +2560,7 @@ int RichTextLabel::_find_list(Item *p_item, Vector<int> &r_index, Vector<int> &r
 
 	int level = 0;
 
-	while (item) {
+	while (item && (item->type != ITEM_TABLE || item == p_item)) {
 		if (item->type == ITEM_LIST) {
 			ItemList *list = static_cast<ItemList *>(item);
 
@@ -3528,6 +3528,7 @@ void RichTextLabel::_remove_frame(HashSet<Item *> &r_erase_list, ItemFrame *p_fr
 
 bool RichTextLabel::remove_paragraph(int p_paragraph, bool p_no_invalidate) {
 	_stop_thread();
+	_validate_line_caches();
 	MutexLock data_lock(data_mutex);
 
 	if (p_paragraph >= (int)main->lines.size() || p_paragraph < 0) {
@@ -3545,6 +3546,8 @@ bool RichTextLabel::remove_paragraph(int p_paragraph, bool p_no_invalidate) {
 		main->lines.resize(1);
 
 		current_char_ofs = 0;
+
+		_region_items.clear();
 	} else {
 		HashSet<Item *> erase_list;
 		Line &l = main->lines[p_paragraph];
@@ -3570,6 +3573,9 @@ bool RichTextLabel::remove_paragraph(int p_paragraph, bool p_no_invalidate) {
 			items.free(it->rid);
 			it->subitems.clear();
 			memdelete(it);
+		}
+		for (HashMap<String, Item *>::Iterator E = _region_items.begin(); E; ++E) {
+			if (erase_list.has(E->value)) _region_items.erase(E->key);
 		}
 		main->lines.remove_at(p_paragraph);
 		current_char_ofs -= off;
@@ -3879,6 +3885,18 @@ void RichTextLabel::push_language(const String &p_language) {
 	item->owner = get_instance_id();
 	item->rid = items.make_rid(item);
 	item->language = p_language;
+	_add_item(item, true);
+}
+
+void RichTextLabel::push_region(const String &p_id) {
+	_stop_thread();
+	MutexLock data_lock(data_mutex);
+
+	ERR_FAIL_COND(current->type == ITEM_TABLE);
+	ItemRegion *item = memnew(ItemRegion);
+	item->owner = get_instance_id();
+	item->rid = items.make_rid(item);
+	item->id = p_id;
 	_add_item(item, true);
 }
 
@@ -4206,6 +4224,8 @@ void RichTextLabel::clear() {
 	if (fit_content) {
 		update_minimum_size();
 	}
+
+	_region_items.clear();
 }
 
 void RichTextLabel::set_tab_size(int p_spaces) {
@@ -4657,6 +4677,12 @@ void RichTextLabel::append_text(const String &p_bbcode) {
 			int32_t char_code = _get_tag_value(tag).hex_to_int();
 			add_text(String::chr(char_code));
 			pos = brk_end + 1;
+		} else if (tag.begins_with("region=")) {
+			String region_id = tag.substr(7, -1);
+			push_region(region_id);
+			_region_items[region_id] = current;
+			pos = brk_end + 1;
+			tag_stack.push_front("region");
 		} else if (tag == "lb") {
 			add_text("[");
 			pos = brk_end + 1;
@@ -6442,6 +6468,7 @@ void RichTextLabel::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("push_meta", "data", "underline_mode", "tooltip"), &RichTextLabel::push_meta, DEFVAL(META_UNDERLINE_ALWAYS), DEFVAL(String()));
 	ClassDB::bind_method(D_METHOD("push_hint", "description"), &RichTextLabel::push_hint);
 	ClassDB::bind_method(D_METHOD("push_language", "language"), &RichTextLabel::push_language);
+	ClassDB::bind_method(D_METHOD("push_region", "id"), &RichTextLabel::push_region);
 	ClassDB::bind_method(D_METHOD("push_underline"), &RichTextLabel::push_underline);
 	ClassDB::bind_method(D_METHOD("push_strikethrough"), &RichTextLabel::push_strikethrough);
 	ClassDB::bind_method(D_METHOD("push_table", "columns", "inline_align", "align_to_row"), &RichTextLabel::push_table, DEFVAL(INLINE_ALIGNMENT_TOP), DEFVAL(-1));
@@ -6584,6 +6611,8 @@ void RichTextLabel::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_menu"), &RichTextLabel::get_menu);
 	ClassDB::bind_method(D_METHOD("is_menu_visible"), &RichTextLabel::is_menu_visible);
 	ClassDB::bind_method(D_METHOD("menu_option", "option"), &RichTextLabel::menu_option);
+	ClassDB::bind_method(D_METHOD("get_regions"), &RichTextLabel::get_regions);
+	ClassDB::bind_method(D_METHOD("get_paragraph_region_rects", "paragraph", "id"), &RichTextLabel::get_paragraph_region_rects);
 
 	// Note: set "bbcode_enabled" first, to avoid unnecessary "text" resets.
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "bbcode_enabled"), "set_use_bbcode", "is_using_bbcode");
@@ -6967,6 +6996,189 @@ Dictionary RichTextLabel::parse_expressions_for_values(Vector<String> p_expressi
 		}
 	}
 	return d;
+}
+
+Dictionary RichTextLabel::get_regions() {
+	Dictionary dict;
+	for (auto& kv : _region_items) {
+		dict[kv.key] = kv.value->char_ofs;
+	}
+	return dict;
+}
+
+#define WRAP_GLYPHS \
+if (!goi.is_empty()) {		\
+	float local_line_prefix_width = (local_line_index <= dc_lines ? dc_size.width : 0.0f) + line.offset.x;		\
+	float local_line_offset_u = (lrtl ? scroll_w : 0.0f) + (rtl ? width - local_line_size.x - local_line_prefix_width : local_line_prefix_width);		\
+	for (int cur = 0; cur < local_line_glyph_count; cur++) {		\
+		auto& glyph = local_line_glyphs[cur];		\
+			\
+		if (goi.has(&glyph)) {		\
+			Rect2 rect(		\
+				local_line_offset_u, 		\
+				local_line_offset_v, 		\
+				glyph.advance * glyph.repeat, 		\
+				local_line_size.height);		\
+						\
+			if (!map.has(local_line_index)) {		\
+				map.insert(local_line_index, rect);		\
+			} else {		\
+				map[local_line_index] = rect.merge(map[local_line_index]);		\
+			}		\
+		}		\
+			\
+		local_line_offset_u += glyph.advance * glyph.repeat;		\
+	}		\
+} else ((void)0)
+
+Dictionary RichTextLabel::get_paragraph_region_rects(int p_paragraph, const String& p_id) {
+	Dictionary rects;
+	ERR_FAIL_COND_V(p_paragraph < 0 || p_paragraph >= get_paragraph_count(), rects);
+
+	auto ts = TS;
+
+	auto start_it = _region_items.find(p_id);
+	ERR_FAIL_COND_V(start_it == _region_items.end(), rects);
+
+	auto line = main->lines[p_paragraph];
+	auto line_rid = line.text_buf->get_rid();
+	MutexLock lock(line.text_buf->get_mutex());
+
+	HashMap<int, Rect2> map;
+	auto item = start_it->value;
+	auto frame = static_cast<ItemFrame *>(main);
+
+	HashSet<RID> span_item_rids;
+
+	bool rtl = line.text_buf->get_direction() == TextServer::Direction::DIRECTION_RTL;
+	bool lrtl = is_layout_rtl();
+	int width = get_size().width - scroll_w;
+	int dc_lines = line.text_buf->get_dropcap_lines();
+	Size2 dc_size = line.text_buf->get_dropcap_size();
+	int local_line_count = line.text_buf->get_line_count();
+	int local_line_index = 0;
+	while (item != nullptr) {
+		if (item->line == p_paragraph) {
+			if (item->type == ITEM_DROPCAP) {
+				float local_line_offset_u = (lrtl ? scroll_w : 0.0f) + (rtl ? width - dc_size.width - line.offset.x : line.offset.x);
+				Rect2 rect(
+					local_line_offset_u,
+					0.0f,
+					dc_size.width,
+					dc_size.height);
+
+				map.insert(-1, rect);
+			} else {
+				// Item might pair up with a span
+				span_item_rids.insert(item->rid);
+			}
+		}
+
+		// Move next
+		if (item->subitems.size() && item->type != ITEM_TABLE) {
+			item = item->subitems.front()->get();
+		} else if (item->type == ITEM_REGION && static_cast<ItemRegion *>(item)->id == p_id) {
+			item = nullptr;
+		} else if (item->E->next()) {
+			item = item->E->next()->get();
+		} else {
+			// Go up until something with a next is found.
+			while (!(item->type == ITEM_REGION && static_cast<ItemRegion *>(item)->id == p_id) && !item->E->next()) {
+				item = item->parent;
+			}
+
+			if (item->type != ITEM_REGION || static_cast<ItemRegion *>(item)->id != p_id) {
+				item = item->E->next()->get();
+			} else {
+				item = nullptr;
+			}
+		}
+	}
+
+	local_line_index = 0;
+	int64_t span_count = ts->shaped_get_span_count(line_rid), span_index = 0;
+	float local_line_offset_v = 0.0f;
+	Size2 local_line_size = line.text_buf->get_line_size(local_line_index);
+	int local_line_char_index = 0;
+	Vector2i local_line_range = line.text_buf->get_line_range(local_line_index);
+	Vector2i span_range;
+	RID local_line_rid;
+	HashMap<int, const Glyph *> local_line_glyph_map;
+	const Glyph *local_line_glyphs;
+	int64_t local_line_glyph_count;
+	int local_line_seen_vcs;
+	bool first_time = true;
+	HashSet<const Glyph *> goi;
+	while (local_line_index < local_line_count) {
+		while (
+			span_index < span_count && 
+			(!span_item_rids.has(ts->shaped_get_span_meta(line_rid, span_index)) && !span_item_rids.has(ts->shaped_get_span_embedded_key(line_rid, span_index)) ||
+			(span_range = ts->shaped_get_span_range(line_rid, span_index)).y <= local_line_range.x + local_line_char_index)) {
+			span_index++;
+		}
+		if (span_index >= span_count) break;		// No more spans
+
+		bool line_change = false;
+		while (local_line_char_index >= (local_line_range.y - local_line_range.x) || span_range.x >= local_line_range.y) {
+			if (!line_change) {
+				line_change = true;
+				
+				WRAP_GLYPHS;
+
+				goi.clear();
+			}
+
+			local_line_offset_v += local_line_size.y;
+			local_line_char_index = 0;
+
+			local_line_index++;
+			local_line_size = line.text_buf->get_line_size(local_line_index);
+			local_line_range = line.text_buf->get_line_range(local_line_index);
+			line_change = true;
+		}
+
+		if (line_change || first_time) {
+			local_line_seen_vcs = 0;
+
+			local_line_rid = line.text_buf->get_line_rid(local_line_index);
+			local_line_glyph_count = ts->shaped_text_get_glyph_count(local_line_rid);
+
+			local_line_glyph_map.clear();
+			local_line_glyphs = ts->shaped_text_get_glyphs(local_line_rid);
+			for (int i = 0; i < local_line_glyph_count; i++) {
+				if (local_line_glyph_map.has(local_line_glyphs[i].start)) continue;
+				local_line_glyph_map[local_line_glyphs[i].start] = local_line_glyphs + i;
+				for (int j = 1; j < local_line_glyphs[i].count; j++) {
+					local_line_glyph_map[local_line_glyphs[i].start + j] = local_line_glyphs + i;
+				}
+			}
+
+			first_time = false;
+		}
+
+		int limit = MIN(local_line_range.y, span_range.y);
+		while (local_line_range.x + local_line_char_index < limit) {
+			auto it = local_line_glyph_map.find(local_line_seen_vcs + local_line_range.x + local_line_char_index);
+			if (it == local_line_glyph_map.end()) {
+				local_line_char_index++;
+				continue;
+			}
+			auto glyph = it->value;
+
+			if (local_line_range.x + local_line_char_index >= span_range.x) goi.insert(glyph);
+
+			if (glyph->flags & (TextServer::GraphemeFlag::GRAPHEME_IS_VIRTUAL) || ~glyph->flags & TextServer::GraphemeFlag::GRAPHEME_IS_VALID) local_line_seen_vcs++;
+			else local_line_char_index++;
+		}
+	}
+
+	WRAP_GLYPHS;
+	
+	for (auto& kv : map) {
+		rects[kv.key] = kv.value;
+	}
+
+	return rects;
 }
 
 RichTextLabel::RichTextLabel(const String &p_text) {

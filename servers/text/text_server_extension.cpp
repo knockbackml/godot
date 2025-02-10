@@ -1199,6 +1199,18 @@ Variant TextServerExtension::shaped_get_span_embedded_object(const RID &p_shaped
 	return ret;
 }
 
+Vector2i TextServerExtension::shaped_get_span_range(const RID &p_shaped, int64_t p_index) const {
+	Vector2i ret;
+	GDVIRTUAL_CALL(_shaped_get_span_range, p_shaped, p_index, ret);
+	return ret;
+}
+
+Variant TextServerExtension::shaped_get_span_embedded_key(const RID &p_shaped, int64_t p_index) const {
+	Variant ret;
+	GDVIRTUAL_CALL(_shaped_get_span_embedded_key, p_shaped, p_index, ret);
+	return ret;
+}
+
 void TextServerExtension::shaped_set_span_update_font(const RID &p_shaped, int64_t p_index, const TypedArray<RID> &p_fonts, int64_t p_size, const Dictionary &p_opentype_features) {
 	GDVIRTUAL_CALL(_shaped_set_span_update_font, p_shaped, p_index, p_fonts, p_size, p_opentype_features);
 }
